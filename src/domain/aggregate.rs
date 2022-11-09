@@ -1,23 +1,26 @@
+use std::marker::PhantomData;
+
 use async_trait::async_trait;
 use cqrs_es::Aggregate;
 use serde::{Deserialize, Serialize};
 
-use crate::domain::commands::BankAccountCommand;
 use crate::domain::events::{BankAccountError, BankAccountEvent};
 use crate::services::BankAccountServices;
+use crate::{domain::commands::BankAccountCommand, services::BankAccountApi};
 
 #[derive(Serialize, Deserialize)]
-pub struct BankAccount {
+pub struct BankAccount<T> {
     account_id: String,
     balance: f64,
+    phantom: PhantomData<T>,
 }
 
 #[async_trait]
-impl Aggregate for BankAccount {
+impl<Api: BankAccountApi> Aggregate for BankAccount<Api> {
     type Command = BankAccountCommand;
     type Event = BankAccountEvent;
     type Error = BankAccountError;
-    type Services = BankAccountServices;
+    type Services = BankAccountServices<Api>;
 
     // This identifier should be unique to the system.
     fn aggregate_type() -> String {
@@ -107,11 +110,12 @@ impl Aggregate for BankAccount {
     }
 }
 
-impl Default for BankAccount {
+impl<Api: BankAccountApi> Default for BankAccount<Api> {
     fn default() -> Self {
         BankAccount {
             account_id: "".to_string(),
             balance: 0_f64,
+            phantom: PhantomData,
         }
     }
 }
@@ -133,7 +137,7 @@ mod aggregate_tests {
 
     // A test framework that will apply our events and command
     // and verify that the logic works as expected.
-    type AccountTestFramework = TestFramework<BankAccount>;
+    type AccountTestFramework = TestFramework<BankAccount<MockBankAccountServices>>;
 
     #[test]
     fn test_deposit_money() {
@@ -142,7 +146,7 @@ mod aggregate_tests {
             balance: 200.0,
         };
         let command = BankAccountCommand::DepositMoney { amount: 200.0 };
-        let services = BankAccountServices::new(Box::new(MockBankAccountServices::default()));
+        let services = BankAccountServices::new(MockBankAccountServices::default());
         // Obtain a new test framework
         AccountTestFramework::with(services)
             // In a test case with no previous events
@@ -164,7 +168,7 @@ mod aggregate_tests {
             balance: 400.0,
         };
         let command = BankAccountCommand::DepositMoney { amount: 200.0 };
-        let services = BankAccountServices::new(Box::new(MockBankAccountServices::default()));
+        let services = BankAccountServices::new(MockBankAccountServices::default());
 
         AccountTestFramework::with(services)
             // Given this previously applied event
@@ -192,7 +196,7 @@ mod aggregate_tests {
             atm_id: "ATM34f1ba3c".to_string(),
         };
 
-        AccountTestFramework::with(BankAccountServices::new(Box::new(services)))
+        AccountTestFramework::with(BankAccountServices::new(services))
             .given(vec![previous])
             .when(command)
             .then_expect_events(vec![expected]);
@@ -211,7 +215,7 @@ mod aggregate_tests {
             atm_id: "ATM34f1ba3c".to_string(),
         };
 
-        let services = BankAccountServices::new(Box::new(services));
+        let services = BankAccountServices::new(services);
         AccountTestFramework::with(services)
             .given(vec![previous])
             .when(command)
@@ -225,7 +229,7 @@ mod aggregate_tests {
             atm_id: "ATM34f1ba3c".to_string(),
         };
 
-        let services = BankAccountServices::new(Box::new(MockBankAccountServices::default()));
+        let services = BankAccountServices::new(MockBankAccountServices::default());
         AccountTestFramework::with(services)
             .given_no_previous_events()
             .when(command)
@@ -246,7 +250,7 @@ mod aggregate_tests {
         };
         let services = MockBankAccountServices::default();
         services.set_validate_check_response(Ok(()));
-        let services = BankAccountServices::new(Box::new(services));
+        let services = BankAccountServices::new(services);
         let command = BankAccountCommand::WriteCheck {
             check_number: "1170".to_string(),
             amount: 100.0,
@@ -266,7 +270,7 @@ mod aggregate_tests {
         };
         let services = MockBankAccountServices::default();
         services.set_validate_check_response(Err(CheckingError));
-        let services = BankAccountServices::new(Box::new(services));
+        let services = BankAccountServices::new(services);
         let command = BankAccountCommand::WriteCheck {
             check_number: "1170".to_string(),
             amount: 100.0,
@@ -285,7 +289,7 @@ mod aggregate_tests {
             amount: 100.0,
         };
 
-        let services = BankAccountServices::new(Box::new(MockBankAccountServices::default()));
+        let services = BankAccountServices::new(MockBankAccountServices::default());
         AccountTestFramework::with(services)
             .given_no_previous_events()
             .when(command)

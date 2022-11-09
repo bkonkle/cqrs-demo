@@ -8,12 +8,12 @@ use crate::domain::aggregate::BankAccount;
 use crate::queries::{AccountQuery, BankAccountView, SimpleLoggingQuery};
 use crate::services::{BankAccountServices, HappyPathBankAccountServices};
 
-pub fn cqrs_framework(
-    pool: Pool<Postgres>,
-) -> (
-    Arc<PostgresCqrs<BankAccount>>,
-    Arc<PostgresViewRepository<BankAccountView, BankAccount>>,
-) {
+type DefuaultCqrsFramework = Arc<PostgresCqrs<BankAccount<HappyPathBankAccountServices>>>;
+
+type DefaultViewRepository =
+    Arc<PostgresViewRepository<BankAccountView, BankAccount<HappyPathBankAccountServices>>>;
+
+pub fn cqrs_framework(pool: Pool<Postgres>) -> (DefuaultCqrsFramework, DefaultViewRepository) {
     // A very simple query that writes each event to stdout.
     let simple_query = SimpleLoggingQuery {};
 
@@ -27,9 +27,9 @@ pub fn cqrs_framework(
     account_query.use_error_handler(Box::new(|e| println!("{}", e)));
 
     // Create and return an event-sourced `CqrsFramework`.
-    let queries: Vec<Box<dyn Query<BankAccount>>> =
+    let queries: Vec<Box<dyn Query<BankAccount<HappyPathBankAccountServices>>>> =
         vec![Box::new(simple_query), Box::new(account_query)];
-    let services = BankAccountServices::new(Box::new(HappyPathBankAccountServices));
+    let services = BankAccountServices::new(HappyPathBankAccountServices);
     (
         Arc::new(postgres_es::postgres_cqrs(pool, queries, services)),
         account_view_repo,

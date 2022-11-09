@@ -1,11 +1,11 @@
 use async_trait::async_trait;
 
-pub struct BankAccountServices {
-    pub services: Box<dyn BankAccountApi>,
+pub struct BankAccountServices<Api: BankAccountApi> {
+    pub services: Api,
 }
 
-impl BankAccountServices {
-    pub fn new(services: Box<dyn BankAccountApi>) -> Self {
+impl<Api: BankAccountApi> BankAccountServices<Api> {
+    pub fn new(services: Api) -> Self {
         Self { services }
     }
 }

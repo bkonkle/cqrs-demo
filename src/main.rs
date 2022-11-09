@@ -10,6 +10,7 @@ use axum::routing::get;
 use axum::{Json, Router};
 use cqrs_es::persist::ViewRepository;
 use postgres_es::{default_postgress_pool, PostgresCqrs, PostgresViewRepository};
+use services::{BankAccountApi, HappyPathBankAccountServices};
 
 use crate::config::cqrs_framework;
 use crate::domain::aggregate::BankAccount;
@@ -40,7 +41,8 @@ async fn main() {
     let router = Router::new()
         .route(
             "/account/:account_id",
-            get(query_handler).post(command_handler),
+            get(query_handler::<HappyPathBankAccountServices>)
+                .post(command_handler::<HappyPathBankAccountServices>),
         )
         .layer(Extension(cqrs))
         .layer(Extension(account_query));
@@ -54,9 +56,9 @@ async fn main() {
 
 // Serves as our query endpoint to respond with the materialized `BankAccountView`
 // for the requested account.
-async fn query_handler(
+async fn query_handler<Api: BankAccountApi>(
     Path(account_id): Path<String>,
-    Extension(view_repo): Extension<Arc<PostgresViewRepository<BankAccountView, BankAccount>>>,
+    Extension(view_repo): Extension<Arc<PostgresViewRepository<BankAccountView, BankAccount<Api>>>>,
 ) -> Response {
     let view = match view_repo.load(&account_id).await {
         Ok(view) => view,
@@ -71,10 +73,10 @@ async fn query_handler(
 }
 
 // Serves as our command endpoint to make changes in a `BankAccount` aggregate.
-async fn command_handler(
+async fn command_handler<Api: BankAccountApi>(
     Path(account_id): Path<String>,
     Json(command): Json<BankAccountCommand>,
-    Extension(cqrs): Extension<Arc<PostgresCqrs<BankAccount>>>,
+    Extension(cqrs): Extension<Arc<PostgresCqrs<BankAccount<Api>>>>,
     MetadataExtension(metadata): MetadataExtension,
 ) -> Response {
     match cqrs
